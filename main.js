@@ -1,3 +1,5 @@
+import './style.css'
+
 class Game {
   constructor() {
     this.allCards = []; // Will contain all the cards on the field
