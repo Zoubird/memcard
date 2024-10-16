@@ -1,5 +1,3 @@
-import './style.css'
-
 class Game {
   constructor() {
     this.allCards = []; // Will contain all the cards on the field
@@ -18,6 +16,7 @@ class Game {
       { 1: 'got', 2: './public/img/got logo.jpg' }
     ]; // All possible cards that can get placed
     this.flippedCards = []; // Will track the flipped cards
+    this.isProcessingFlip = false;
     this.scoreElement = document.getElementById("score"); // Reference to the score element
     this.startCardGame(); // Will start the card game
   }
@@ -45,10 +44,8 @@ class Game {
   }
 
   fetchCards() {
-    const requestedCards = this.askCards() / 2; // Gets the requested amount and divides by two
-    const slicedCards = this.cardPool.slice(0, requestedCards); // Fetches the cards from the card pool
-    const newArray = [...slicedCards, ...slicedCards]; // Creates dupes of every card
-    const shuffledArray = this.shuffleAvoidDupes(newArray); // Shuffles and avoids dupes next to one another
+    const slicedCards = this.cardPool.slice(0, (this.askCards() / 2)); // Fetches the cards from the card pool
+    const shuffledArray = this.shuffleAvoidDupes([...slicedCards, ...slicedCards]); // Shuffles and avoids dupes next to one another
     return shuffledArray; // Returns the array ready for use
   }
 
@@ -61,7 +58,7 @@ class Game {
     return requestedCards; // Return em
   }
 
-  checkMatch() {
+  async checkMatch() {
     // Checks if the flipped cards are the same using the name property (which i created)
     if (this.flippedCards[0]['name'] === this.flippedCards[1]['name']) {     
 
@@ -69,24 +66,22 @@ class Game {
         this.flippedCards.forEach(card => card['allowFlip'] = false);
 
         // Increases the score
-        let score = Number(this.scoreElement.innerHTML);
-        score++;
-        this.scoreElement.innerHTML = score;
+        this.scoreElement.innerHTML = Number(this.scoreElement.innerHTML) + 1; 
 
         // Empty the flipped cards (should i rename it to 'selectedCards'?)
         this.flippedCards = [];
-    } else {
-      // Waits one second before unflipping for a 'dramatic' effect
-      setTimeout(() => {
-          // Unflip the cards
-          this.flippedCards.forEach(card => {
-              card['card'].classList.toggle("flipped");
-              card['allowFlip'] = true;
-          });
-          // Clear flipped cards after unflipping
-          this.flippedCards = [];
-      }, 1000);
+    } 
+    else {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Unflip the cards
+      this.flippedCards.forEach(card => {
+          card['card'].classList.toggle("flipped");
+          card['allowFlip'] = true;
+      });
+      // Clear flipped cards after unflipping
+      this.flippedCards = [];
     }
+    this.isProcessingFlip = false;
   }
 
   async checkCompleted() {
@@ -95,9 +90,7 @@ class Game {
       await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second before flipping the cards back
 
       // Flip all cards back
-      this.allCards.forEach(c => {
-        c['card'].classList.toggle("flipped");
-      });
+      this.allCards.forEach(c => c['card'].classList.toggle("flipped"));
 
       await new Promise(resolve => setTimeout(resolve, 500)); // Wait 0.5 sec
 
@@ -119,28 +112,21 @@ class Game {
   }
 
   async handleCardClick(card) {
+    if (this.isProcessingFlip || this.flippedCards.length >= 2) return;
+
     // Gets the current index of the cards inside allCards
     const index = this.allCards.findIndex(cardobj => cardobj['card'] === card);
 
-    // Only proceed if the card is flipped and is allowed to flip
-    if (card.classList.contains("flipped") && this.allCards[index]['allowFlip'] === true) {
-        // Unflip the card
-        card.classList.toggle('flipped');
-        
-        // Remove from flippedCards
-        const flippedIndex = this.flippedCards.findIndex(c => c.card === card);
-        if (flippedIndex !== -1) {
-            this.flippedCards.splice(flippedIndex, 1);
-        }
-      } // Proceed if the card is unflipped and is allowed to flip
-      else if (!card.classList.contains("flipped") && this.allCards[index]['allowFlip'] === true) {
+    if (!card.classList.contains("flipped") && this.allCards[index]['allowFlip'] === true) {
         // Flip the card if it's not flipped and allowed
         card.classList.toggle('flipped');
         this.flippedCards.push(this.allCards[index]);
         this.allCards[index]['allowFlip'] = false; // Dont allow the player to unflip the card to prevent 'peeking' or cheating
         
-        // Check for a match when two cards are flipped
-        if (this.flippedCards.length === 2) this.checkMatch();
+        if (this.flippedCards.length === 2) {
+          this.isProcessingFlip = true; // Set the flag before processing the flip
+          await this.checkMatch();
+        }
     }
 
     // Check for completion of the game
@@ -150,52 +136,48 @@ class Game {
   createCards(cardsList) {
     // Creates an HTML div element for each card in the cards list
     for (let i = 0; i < cardsList.length; i++) {
-      // Create card
-      let newCard = document.createElement("div");
-      newCard.addEventListener('click', () => this.handleCardClick(newCard)); // Calls the function to handle everything when clicked
-      newCard.classList.add('card')
-      document.getElementById("app").appendChild(newCard); // Append to div which is a grid and will contain all cards
-
-      // Create the front and backside and places an image inside the imgcontainer inside the back div
-      let frontSide = document.createElement("div");
-      frontSide.classList.add('card-front');
-      let backSide = document.createElement("div");
-      let backImg = document.createElement("img");
-      let imgContainer = document.createElement("div");
-      backImg.src = cardsList[i][2];
-      backImg.classList.add("img")
-      backSide.classList.add('card-back');
+      let carddiv = this.createCardDiv(i, cardsList);
 
       // Append the sides to the card div and push them to a reference list
-      newCard.appendChild(frontSide);
-      newCard.appendChild(backSide);
-      backSide.appendChild(imgContainer);
-      imgContainer.appendChild(backImg);
+      carddiv[0].appendChild(carddiv[1]);
+      carddiv[0].appendChild(carddiv[2]);
+      carddiv[2].appendChild(carddiv[4]);
+      carddiv[4].appendChild(carddiv[3]);
 
       // Creates an object with a name to make match checking easier and allowflip to prevent peeking and the card itself
-      this.allCards.push({'name': cardsList[i][1], 'allowFlip': true, 'card': newCard});
+      this.allCards.push({'name': cardsList[i][1], 'allowFlip': true, 'card': carddiv[0]});
     }
   }
 
-  clearScreen() {
-    // Fetches all cards inside the grid
-    let elements = document.getElementById("app").children;
+  createCardDiv(i, cardsList) {
+    // Create card
+    let newCard = document.createElement("div");
+    newCard.addEventListener('click', () => this.handleCardClick(newCard))
+    newCard.classList.add('card')
+    document.getElementById("app").appendChild(newCard); // Append to div which is a grid and will contain all cards
 
+    // Create the front and backside and places an image inside the imgcontainer inside the back div
+    let frontSide = document.createElement("div");
+    frontSide.classList.add('card-front');
+    let backSide = document.createElement("div");
+    let backImg = document.createElement("img");
+    let imgContainer = document.createElement("div");
+    backImg.src = cardsList[i][2];
+    backImg.classList.add("img")
+    backSide.classList.add('card-back');
+
+    return [newCard, frontSide, backSide, backImg, imgContainer];
+  }
+
+  clearScreen() {
     // Remove the cards from the grid using a loop
-    for (let [key, value] of Object.entries(elements)) {
-      if (key !== 'length') {
-        value.remove()
-      }
-    }
+    for (let [key, value] of Object.entries(document.getElementById("app").children)) if (key !== 'length') value.remove();
   }
 
   startCardGame() {
     // Clears screen and waits 0.5 sec before starting
     this.clearScreen();
-    setTimeout(() => {
-      let cardsList = this.fetchCards(); // Fetches cards
-      this.createCards(cardsList); // and creates a div for each one
-    }, 500);
+    setTimeout(() => this.createCards(this.fetchCards()), 500);
   }
 }
 
